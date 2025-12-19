@@ -3,7 +3,6 @@ open Interp
 
 let eps = 1e-12
 
-(* заменяет разделители на пробел для единого парсинга *)
 let normalize_separators (s : string) : string =
   let b = Bytes.of_string s in
   for i = 0 to Bytes.length b - 1 do
@@ -17,7 +16,7 @@ let split_fields (s : string) : string list =
   |> List.filter (fun t -> String.length t > 0)
 
 (* парсит одну строку в точку допускает пустые строки *)
-let parse_point (line : string) : Interp.point option =
+let parse_point (line : string) : point option =
   let trimmed = String.trim line in
   if trimmed = "" then None
   else if String.length trimmed > 0 && trimmed.[0] = '#' then None
@@ -31,33 +30,33 @@ let parse_point (line : string) : Interp.point option =
         with Failure _ -> None)
     | _ -> None
 
-(* печать результата в формате algorithm x y *)
-let print_point (algo : string) (p : Interp.point) =
+(* печать результата в формате алгоритм x y *)
+let print_point (algo : string) (p : point) =
   Printf.printf "%s: %.10g %.10g\n%!" algo p.x p.y
 
 module Linear_stream = struct
   type state = {
     step : float;
-    prev : Interp.point option;
-    prev2 : Interp.point option;
+    prev : point option;
+    prev2 : point option;
     next_x : float option;
   }
 
   let init ~step = { step; prev = None; prev2 = None; next_x = None }
 
   (* вычисляет точки на отрезке от next_x до b.x включительно *)
-  let emit_segment step (a : Interp.point) (b : Interp.point) (next_x : float) :
-      Interp.point list * float =
+  let emit_segment step (a : point) (b : point) (next_x : float) :
+      point list * float =
     let rec loop acc x =
       if x > b.x +. eps then (List.rev acc, x)
       else
-        let y = Interp.Linear.interpolate_between a b x in
+        let y = Linear.interpolate_between a b x in
         loop ({ x; y } :: acc) (x +. step)
     in
     loop [] next_x
 
   (* обновляет состояние при получении новой точки *)
-  let on_point st (p : Interp.point) : state * Interp.point list =
+  let on_point st (p : point) : state * point list =
     match (st.prev, st.next_x) with
     | None, _ ->
         let nx = Some p.x in
@@ -70,7 +69,7 @@ module Linear_stream = struct
         ({ st with prev2 = Some prev; prev = Some p; next_x = Some nx' }, pts)
 
   (* финальный вывод для последнего сегмента при eof *)
-  let on_eof st : Interp.point list =
+  let on_eof st : point list =
     match (st.prev2, st.prev, st.next_x) with
     | Some a, Some b, Some nx ->
         let pts, _ = emit_segment st.step a b nx in
@@ -82,7 +81,7 @@ module Newton_stream = struct
   type state = {
     step : float;
     n : int;
-    window : Interp.point list;
+    window : point list;
     next_x : float option;
   }
 
@@ -104,7 +103,7 @@ module Newton_stream = struct
       in
       drop_k drop win'
 
-  let last_point (pts : Interp.point list) : Interp.point option =
+  let last_point (pts : point list) : point option =
     let rec loop = function
       | [] -> None
       | [ p ] -> Some p
@@ -112,7 +111,7 @@ module Newton_stream = struct
     in
     loop pts
 
-  let nth_point_x (pts : Interp.point list) (i : int) : float option =
+  let nth_point_x (pts : point list) (i : int) : float option =
     let rec loop k = function
       | [] -> None
       | p :: ps -> if k = 0 then Some p.x else loop (k - 1) ps
@@ -120,18 +119,17 @@ module Newton_stream = struct
     loop i pts
 
   (* вычисляет значения на сетке от nx до stop_x включительно *)
-  let emit_until (win : Interp.point list) step nx stop_x :
-      Interp.point list * float =
+  let emit_until (win : point list) step nx stop_x : point list * float =
     let rec loop acc x =
       if x > stop_x +. eps then (List.rev acc, x)
       else
-        let y = Interp.Newton.interpolate_at win x in
+        let y = Newton.interpolate_at win x in
         loop ({ x; y } :: acc) (x +. step)
     in
     loop [] nx
 
   (* выдача значений идет до центра окна для повышения устойчивости *)
-  let on_point st (p : Interp.point) : state * Interp.point list =
+  let on_point st (p : point) : state * point list =
     let win = append_trim st.n st.window p in
     let len = List.length win in
     let nx =
@@ -149,7 +147,7 @@ module Newton_stream = struct
           ({ st with window = win; next_x = Some nx' }, pts)
 
   (* финальный вывод до последней точки при eof *)
-  let on_eof st : Interp.point list =
+  let on_eof st : point list =
     match (st.next_x, last_point st.window) with
     | Some nx, Some last ->
         if List.length st.window < 2 then []
@@ -188,37 +186,41 @@ let () =
     if a = [] then [ A_linear ] else List.rev a
   in
 
-  let linear_state = ref (Linear_stream.init ~step:!step) in
-  let newton_state = ref (Newton_stream.init ~step:!step ~n:!newton_n) in
-
-  (* обработка одной входной точки и немедленная печать результата *)
-  let feed_point (p : Interp.point) =
-    List.iter
-      (function
-        | A_linear ->
-            let st', out = Linear_stream.on_point !linear_state p in
-            linear_state := st';
-            List.iter (print_point "linear") out
-        | A_newton _ ->
-            let st', out = Newton_stream.on_point !newton_state p in
-            newton_state := st';
-            List.iter (print_point "newton") out)
-      algos
+  let has_linear =
+    List.exists (function A_linear -> true | _ -> false) algos
+  in
+  let has_newton =
+    List.exists (function A_newton _ -> true | _ -> false) algos
   in
 
-  (* потоковое чтение stdin и вычисление по мере поступления данных *)
-  (try
-     while true do
-       let line = input_line stdin in
-       match parse_point line with None -> () | Some p -> feed_point p
-     done
-   with End_of_file -> ());
+  (* начальные состояния передаются в цикл как параметры *)
+  let lst0 = Linear_stream.init ~step:!step in
+  let nst0 = Newton_stream.init ~step:!step ~n:!newton_n in
 
-  (* финальный вывод после завершения входного потока *)
-  List.iter
-    (function
-      | A_linear ->
-          Linear_stream.on_eof !linear_state |> List.iter (print_point "linear")
-      | A_newton _ ->
-          Newton_stream.on_eof !newton_state |> List.iter (print_point "newton"))
-    algos
+  (* основной цикл без мутабельности состояния *)
+  let rec loop (lst : Linear_stream.state) (nst : Newton_stream.state) =
+    match input_line stdin with
+    | line -> (
+        match parse_point line with
+        | None -> loop lst nst
+        | Some p ->
+            let lst', out_l =
+              if has_linear then Linear_stream.on_point lst p else (lst, [])
+            in
+            List.iter (print_point "linear") out_l;
+
+            let nst', out_n =
+              if has_newton then Newton_stream.on_point nst p else (nst, [])
+            in
+            List.iter (print_point "newton") out_n;
+
+            loop lst' nst')
+    | exception End_of_file ->
+        (* финальный вывод после завершения входного потока *)
+        if has_linear then
+          Linear_stream.on_eof lst |> List.iter (print_point "linear");
+        if has_newton then
+          Newton_stream.on_eof nst |> List.iter (print_point "newton")
+  in
+
+  loop lst0 nst0
