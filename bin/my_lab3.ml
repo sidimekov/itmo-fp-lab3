@@ -1,5 +1,5 @@
 open My_lab3_lib
-
+open Interp
 let eps = 1e-12
 
 let normalize_separators (s : string) : string =
@@ -23,7 +23,7 @@ let parse_point (line : string) : Interp.point option =
         try
           let x = float_of_string sx in
           let y = float_of_string sy in
-          Some { Interp.x; y }
+          Some { x; y }
         with Failure _ -> None)
     | _ -> None
 
@@ -46,7 +46,7 @@ module Linear_stream = struct
       if x > b.x +. eps then (List.rev acc, x)
       else
         let y = Interp.Linear.interpolate_between a b x in
-        loop ({ Interp.x; y } :: acc) (x +. step)
+        loop ({ x; y } :: acc) (x +. step)
     in
     loop [] next_x
 
@@ -116,7 +116,7 @@ module Newton_stream = struct
       if x > stop_x +. eps then (List.rev acc, x)
       else
         let y = Interp.Newton.interpolate_at win x in
-        loop ({ Interp.x; y } :: acc) (x +. step)
+        loop ({ x; y } :: acc) (x +. step)
     in
     loop [] nx
 
