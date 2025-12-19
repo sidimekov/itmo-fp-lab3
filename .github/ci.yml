@@ -1,0 +1,27 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5.1.1
+
+      - name: install dependencies
+        run: |
+          opam install -y . --deps-only
+
+      - name: build
+        run: |
+          opam exec -- dune build
+
+      - name: run tests
+        run: |
+          opam exec -- dune runtest
