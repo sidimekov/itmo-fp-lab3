@@ -1,0 +1,3 @@
+(executable
+ (name my_lab3)
+ (libraries my_lab3_lib))

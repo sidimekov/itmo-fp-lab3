@@ -15,42 +15,21 @@ module Linear = struct
       p1.y +. t *. (p2.y -. p1.y)
 
   (* поиск отрезка [p_left; p_right] для заданного x в отсортированном списке точек
-     если x левее всех или правее всех, возвращаем крайние отрезки *)
+     если x левее всех или правее всех, возвращаются крайние отрезки *)
   let find_segment (points : point list) (x : float) : point * point =
     match points with
     | [] | [_] ->
         invalid_arg "linear.find_segment: need at least two points"
-    | p0 :: p1 :: _ as pts ->
-        let rec aux prev rest =
-          match prev, rest with
-          | _, [] ->
-              (* x правее всех точек - берем последние две *)
-              let rec last_two acc = function
-                | [] -> acc
-                | q :: qs ->
-                    let acc' =
-                      match acc with
-                      | None -> Some q
-                      | Some r -> Some r
-                    in
-                    last_two acc' qs
-              in
-              let rec collect_last2 a b = function
-                | [] -> (a, b)
-                | q :: qs -> collect_last2 b q qs
-              in
-              let a, b =
-                match pts with
-                | r1 :: r2 :: rs -> collect_last2 r1 r2 rs
-                | _ -> assert false
-              in
-              (a, b)
-          | None, q :: qs ->
-              if x <= q.x then (p0, q) else aux (Some q) qs
-          | Some p, q :: qs ->
-              if x <= q.x then (p, q) else aux (Some q) qs
-        in
-        aux None pts
+    | p0 :: p1 :: rest ->
+        if x <= p0.x then (p0, p1)
+        else
+          let rec loop prev curr = function
+            | [] -> (prev, curr) (* последние две *)
+            | q :: qs ->
+                if x <= q.x then (curr, q)
+                else loop curr q qs
+          in
+          loop p0 p1 rest
 
   (* интерполяция на равномерной сетке
      points - исходные точки, должны быть отсортированы по x по возрастанию.
