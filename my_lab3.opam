@@ -1,0 +1,13 @@
+opam-version: "2.0"
+name: "my_lab3"
+version: "0.1.0"
+synopsis: "itmo fp lab3 interpolation"
+depends: [
+  "ocaml" {>= "5.1.1"}
+  "dune" {>= "3.10"}
+  "alcotest"
+  "ocamlformat" {>= "0.26.2"}
+]
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+]
