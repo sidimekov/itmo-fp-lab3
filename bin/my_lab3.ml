@@ -5,9 +5,7 @@ let eps = 1e-12
 let normalize_separators (s : string) : string =
   let b = Bytes.of_string s in
   for i = 0 to Bytes.length b - 1 do
-    match Bytes.get b i with
-    | ';' | ',' | '\t' -> Bytes.set b i ' '
-    | _ -> ()
+    match Bytes.get b i with ';' | ',' | '\t' -> Bytes.set b i ' ' | _ -> ()
   done;
   Bytes.to_string b
 
@@ -43,7 +41,7 @@ module Linear_stream = struct
   let init ~step = { step; prev = None; prev2 = None; next_x = None }
 
   let emit_segment step (a : Interp.point) (b : Interp.point) (next_x : float) :
-      (Interp.point list * float) =
+      Interp.point list * float =
     let rec loop acc x =
       if x > b.x +. eps then (List.rev acc, x)
       else
@@ -113,7 +111,7 @@ module Newton_stream = struct
     loop i pts
 
   let emit_until (win : Interp.point list) step nx stop_x :
-      (Interp.point list * float) =
+      Interp.point list * float =
     let rec loop acc x =
       if x > stop_x +. eps then (List.rev acc, x)
       else
@@ -128,10 +126,7 @@ module Newton_stream = struct
     let nx =
       match st.next_x with
       | Some v -> v
-      | None -> (
-          match win with
-          | p0 :: _ -> p0.x
-          | [] -> 0.0)
+      | None -> ( match win with p0 :: _ -> p0.x | [] -> 0.0)
     in
     if len < st.n then ({ st with window = win; next_x = Some nx }, [])
     else
@@ -152,9 +147,7 @@ module Newton_stream = struct
     | _ -> []
 end
 
-type selected =
-  | A_linear
-  | A_newton of int
+type selected = A_linear | A_newton of int
 
 let () =
   let use_linear = ref false in
@@ -176,10 +169,8 @@ let () =
 
   let algos =
     let a =
-      []
-      |> (fun acc -> if !use_linear then A_linear :: acc else acc)
-      |> (fun acc ->
-           if !use_newton then A_newton !newton_n :: acc else acc)
+      ([] |> fun acc -> if !use_linear then A_linear :: acc else acc)
+      |> fun acc -> if !use_newton then A_newton !newton_n :: acc else acc
     in
     if a = [] then [ A_linear ] else List.rev a
   in
@@ -204,9 +195,7 @@ let () =
   (try
      while true do
        let line = input_line stdin in
-       match parse_point line with
-       | None -> ()
-       | Some p -> feed_point p
+       match parse_point line with None -> () | Some p -> feed_point p
      done
    with End_of_file -> ());
 

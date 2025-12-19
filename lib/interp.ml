@@ -1,7 +1,4 @@
-type point = {
-  x : float;
-  y : float;
-}
+type point = { x : float; y : float }
 
 module Linear = struct
   let interpolate_between (p1 : point) (p2 : point) (x : float) : float =
@@ -9,29 +6,28 @@ module Linear = struct
     if dx = 0.0 then invalid_arg "linear.interpolate_between: duplicate x"
     else
       let t = (x -. p1.x) /. dx in
-      p1.y +. t *. (p2.y -. p1.y)
+      p1.y +. (t *. (p2.y -. p1.y))
 
   let find_segment (points : point list) (x : float) : point * point =
     match points with
-    | [] | [_] -> invalid_arg "linear.find_segment: need at least two points"
+    | [] | [ _ ] -> invalid_arg "linear.find_segment: need at least two points"
     | p0 :: p1 :: rest ->
         if x <= p0.x then (p0, p1)
         else
           let rec loop prev curr = function
             | [] -> (prev, curr)
-            | q :: qs ->
-                if x <= q.x then (curr, q)
-                else loop curr q qs
+            | q :: qs -> if x <= q.x then (curr, q) else loop curr q qs
           in
           loop p0 p1 rest
 
   let interpolate_on_uniform_grid (points : point list) ~(step : float) :
       point list =
     match points with
-    | [] | [_] -> []
+    | [] | [ _ ] -> []
     | p0 :: _ as pts ->
         if step <= 0.0 then
-          invalid_arg "linear.interpolate_on_uniform_grid: step must be positive";
+          invalid_arg
+            "linear.interpolate_on_uniform_grid: step must be positive";
         let min_x = p0.x in
         let max_x =
           List.fold_left (fun acc p -> if p.x > acc then p.x else acc) p0.x pts

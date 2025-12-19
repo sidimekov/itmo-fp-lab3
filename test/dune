@@ -5,4 +5,5 @@
 
 (env
  (_
-  (flags (:standard -w +a -warn-error +a))))
+  (flags
+   (:standard -w +a -warn-error +a))))

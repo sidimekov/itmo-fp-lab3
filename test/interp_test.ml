@@ -26,5 +26,9 @@ let test_newton_line () =
 let () =
   run "my_lab3"
     [
-      ("interp", [ test_case "linear_between" `Quick test_linear_between; test_case "newton_line" `Quick test_newton_line ]);
+      ( "interp",
+        [
+          test_case "linear_between" `Quick test_linear_between;
+          test_case "newton_line" `Quick test_newton_line;
+        ] );
     ]
