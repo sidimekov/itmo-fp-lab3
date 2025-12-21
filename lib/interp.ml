@@ -72,11 +72,13 @@ module Newton = struct
   let evaluate (xs : float array) (coeffs : float array) (x : float) : float =
     let n = Array.length coeffs in
     if n = 0 then invalid_arg "newton.evaluate: empty coefficients";
-    let acc = ref coeffs.(n - 1) in
-    for i = n - 2 downto 0 do
-      acc := (!acc *. (x -. xs.(i))) +. coeffs.(i)
-    done;
-    !acc
+    let rec loop i acc = 
+      if i < 0 then acc
+      else 
+        let acc' = (acc *. (x -. xs.(i))) +. coeffs.(i) in 
+        loop (i - 1) acc'
+    in 
+    loop (n - 2) coeffs.(n - 1)
 
   let interpolate_at (points : point list) (x : float) : float =
     let xs, coeffs = build_coefficients points in
