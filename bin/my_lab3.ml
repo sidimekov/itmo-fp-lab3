@@ -157,45 +157,25 @@ module Newton_stream = struct
     | _ -> []
 end
 
-type selected = A_linear | A_newton of int
-
 let () =
-  let use_linear = ref false in
-  let use_newton = ref false in
-  let newton_n = ref 4 in
-  let step = ref 1.0 in
-  let speclist =
-    [
-      ("--linear", Arg.Set use_linear, "use linear interpolation");
-      ("--newton", Arg.Set use_newton, "use newton interpolation");
-      ("-n", Arg.Set_int newton_n, "newton window size");
-      ("--step", Arg.Set_float step, "output grid step");
-    ]
-  in
-  let usage = "my_lab3 [--linear] [--newton -n N] --step S" in
-  Arg.parse speclist (fun _ -> ()) usage;
-
-  if !step <= 0.0 then invalid_arg "step must be positive";
-
-  (* если алгоритмы не выбраны то используется linear *)
-  let algos =
-    let a =
-      ([] |> fun acc -> if !use_linear then A_linear :: acc else acc)
-      |> fun acc -> if !use_newton then A_newton !newton_n :: acc else acc
-    in
-    if a = [] then [ A_linear ] else List.rev a
-  in
+  let cfg = Cli.parse Sys.argv in
+  let step = cfg.step in
+  let algos = cfg.algos in
 
   let has_linear =
-    List.exists (function A_linear -> true | _ -> false) algos
+    List.exists (function Cli.A_linear -> true | _ -> false) algos
   in
   let has_newton =
-    List.exists (function A_newton _ -> true | _ -> false) algos
+    List.exists (function Cli.A_newton _ -> true | _ -> false) algos
   in
 
-  (* начальные состояния передаются в цикл как параметры *)
-  let lst0 = Linear_stream.init ~step:!step in
-  let nst0 = Newton_stream.init ~step:!step ~n:!newton_n in
+  let lst0 = Linear_stream.init ~step:step in
+  let newton_n = 
+    match List.find_opt (function Cli.A_newton _ -> true | _ -> false) algos with
+    | Some (Cli.A_newton n) -> n
+    | _ -> 4
+  in
+  let nst0 = Newton_stream.init ~step:step ~n:newton_n in
 
   (* основной цикл без мутабельности состояния *)
   let rec loop (lst : Linear_stream.state) (nst : Newton_stream.state) =
