@@ -2,26 +2,32 @@ name: ci
 
 on:
   push:
+    branches: ["**"]
   pull_request:
 
 jobs:
   build_and_test:
     runs-on: ubuntu-latest
+
+    container:
+      image: ocaml/opam:ubuntu-22.04-ocaml-5.1
+
     steps:
       - uses: actions/checkout@v4
 
-      - uses: ocaml/setup-ocaml@v3
-        with:
-          ocaml-compiler: 5.1.1
+      - name: Init opam (ensure switch env)
+        run: |
+          opam --version
+          opam update -y
 
-      - name: install dependencies
+      - name: Install dependencies
         run: |
           opam install -y . --deps-only
 
-      - name: build
+      - name: Build
         run: |
           opam exec -- dune build
 
-      - name: run tests
+      - name: Run tests
         run: |
           opam exec -- dune runtest
