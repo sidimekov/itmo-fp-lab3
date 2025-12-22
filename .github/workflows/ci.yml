@@ -2,26 +2,36 @@ name: ci
 
 on:
   push:
+    branches: ["**"]
   pull_request:
 
 jobs:
   build_and_test:
     runs-on: ubuntu-latest
+
+    container:
+      image: ocaml/opam:ubuntu-22.04-ocaml-5.1
+      options: --user root
+
     steps:
       - uses: actions/checkout@v4
 
-      - uses: ocaml/setup-ocaml@v3
-        with:
-          ocaml-compiler: 5.1.1
-
-      - name: install dependencies
+      - name: Init opam
         run: |
+          opam init -y --disable-sandboxing
+          eval $(opam env)
+
+      - name: Install dependencies
+        run: |
+          eval $(opam env)
           opam install -y . --deps-only
 
-      - name: build
+      - name: Build
         run: |
+          eval $(opam env)
           opam exec -- dune build
 
-      - name: run tests
+      - name: Run tests
         run: |
+          eval $(opam env)
           opam exec -- dune runtest
