@@ -1,6 +1,8 @@
 open My_lab3_lib
 open Interp
 
+let eps = 1e-12
+
 let normalize_separators (s : string) : string =
   let b = Bytes.of_string s in
   for i = 0 to Bytes.length b - 1 do
@@ -32,7 +34,128 @@ let parse_point (line : string) : point option =
 let print_point (algo : string) (p : point) =
   Printf.printf "%s: %.10g %.10g\n%!" algo p.x p.y
 
-module Linear_stream = Stream.Make_stream (Stream.Linear_algo)
+module Linear_stream = struct
+  type state = {
+    step : float;
+    prev : point option;
+    prev2 : point option;
+    next_x : float option;
+  }
+
+  let init ~step = { step; prev = None; prev2 = None; next_x = None }
+
+  (* вычисляет точки на отрезке от next_x до b.x включительно *)
+  let emit_segment step (a : point) (b : point) (next_x : float) :
+      point list * float =
+    let rec loop acc x =
+      if x > b.x +. eps then (List.rev acc, x)
+      else
+        let y = Linear.interpolate_between a b x in
+        loop ({ x; y } :: acc) (x +. step)
+    in
+    loop [] next_x
+
+  (* обновляет состояние при получении новой точки *)
+  let on_point st (p : point) : state * point list =
+    match (st.prev, st.next_x) with
+    | None, _ ->
+        let nx = Some p.x in
+        ({ st with prev = Some p; prev2 = None; next_x = nx }, [])
+    | Some prev, Some nx ->
+        let pts, nx' = emit_segment st.step prev p nx in
+        ({ st with prev2 = Some prev; prev = Some p; next_x = Some nx' }, pts)
+    | Some prev, None ->
+        let pts, nx' = emit_segment st.step prev p prev.x in
+        ({ st with prev2 = Some prev; prev = Some p; next_x = Some nx' }, pts)
+
+  (* финальный вывод для последнего сегмента при eof *)
+  let on_eof st : point list =
+    match (st.prev2, st.prev, st.next_x) with
+    | Some a, Some b, Some nx ->
+        let pts, _ = emit_segment st.step a b nx in
+        pts
+    | _ -> []
+end
+
+module Newton_stream = struct
+  type state = {
+    step : float;
+    n : int;
+    window : point list;
+    next_x : float option;
+  }
+
+  let init ~step ~n =
+    if n <= 1 then invalid_arg "newton: n must be > 1";
+    { step; n; window = []; next_x = None }
+
+  (* добавляет точку и обрезает окно до n элементов *)
+  let append_trim n (win : 'a list) (x : 'a) : 'a list =
+    let win' = win @ [ x ] in
+    let len = List.length win' in
+    if len <= n then win'
+    else
+      let drop = len - n in
+      let rec drop_k k = function
+        | [] -> []
+        | ys when k <= 0 -> ys
+        | _ :: ys -> drop_k (k - 1) ys
+      in
+      drop_k drop win'
+
+  let last_point (pts : point list) : point option =
+    let rec loop = function
+      | [] -> None
+      | [ p ] -> Some p
+      | _ :: ps -> loop ps
+    in
+    loop pts
+
+  let nth_point_x (pts : point list) (i : int) : float option =
+    let rec loop k = function
+      | [] -> None
+      | p :: ps -> if k = 0 then Some p.x else loop (k - 1) ps
+    in
+    loop i pts
+
+  (* вычисляет значения на сетке от nx до stop_x включительно *)
+  let emit_until (win : point list) step nx stop_x : point list * float =
+    let rec loop acc x =
+      if x > stop_x +. eps then (List.rev acc, x)
+      else
+        let y = Newton.interpolate_at win x in
+        loop ({ x; y } :: acc) (x +. step)
+    in
+    loop [] nx
+
+  (* выдача значений идет до центра окна для повышения устойчивости *)
+  let on_point st (p : point) : state * point list =
+    let win = append_trim st.n st.window p in
+    let len = List.length win in
+    let nx =
+      match st.next_x with
+      | Some v -> v
+      | None -> ( match win with p0 :: _ -> p0.x | [] -> 0.0)
+    in
+    if len < st.n then ({ st with window = win; next_x = Some nx }, [])
+    else
+      let center_i = (st.n - 1) / 2 in
+      match nth_point_x win center_i with
+      | None -> ({ st with window = win; next_x = Some nx }, [])
+      | Some center_x ->
+          let pts, nx' = emit_until win st.step nx center_x in
+          ({ st with window = win; next_x = Some nx' }, pts)
+
+  (* финальный вывод до последней точки при eof *)
+  let on_eof st : point list =
+    match (st.next_x, last_point st.window) with
+    | Some nx, Some last ->
+        if List.length st.window < 2 then []
+        else
+          let pts, _ = emit_until st.window st.step nx last.x in
+          pts
+    | _ -> []
+end
 
 let () =
   let cfg = Cli.parse Sys.argv in
@@ -46,18 +169,13 @@ let () =
     List.exists (function Cli.A_newton _ -> true | _ -> false) algos
   in
 
+  let lst0 = Linear_stream.init ~step:step in
   let newton_n = 
     match List.find_opt (function Cli.A_newton _ -> true | _ -> false) algos with
     | Some (Cli.A_newton n) -> n
     | _ -> 4
   in
-  
-  let module Newton_stream =
-    Stream.Make_stream (Stream.Newton_algo (struct let n = newton_n end))
-  in
-  
-  let lst0 = Linear_stream.init ~step:step in
-  let nst0 = Newton_stream.init ~step in
+  let nst0 = Newton_stream.init ~step:step ~n:newton_n in
 
   (* основной цикл без мутабельности состояния *)
   let rec loop (lst : Linear_stream.state) (nst : Newton_stream.state) =
