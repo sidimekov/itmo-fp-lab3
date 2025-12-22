@@ -11,23 +11,19 @@ jobs:
 
     container:
       image: ocaml/opam:ubuntu-22.04-ocaml-5.1
+      options: --user root
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Init opam (ensure switch env)
-        run: |
-          opam --version
-          opam update -y
+      - name: Opam update
+        run: opam update -y
 
       - name: Install dependencies
-        run: |
-          opam install -y . --deps-only
+        run: opam install -y . --deps-only
 
       - name: Build
-        run: |
-          opam exec -- dune build
+        run: opam exec -- dune build
 
       - name: Run tests
-        run: |
-          opam exec -- dune runtest
+        run: opam exec -- dune runtest
