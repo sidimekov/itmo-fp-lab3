@@ -16,14 +16,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Opam update
-        run: opam update -y
+      - name: Init opam
+        run: |
+          opam init -y --disable-sandboxing
+          eval $(opam env)
 
       - name: Install dependencies
-        run: opam install -y . --deps-only
+        run: |
+          eval $(opam env)
+          opam install -y . --deps-only
 
       - name: Build
-        run: opam exec -- dune build
+        run: |
+          eval $(opam env)
+          opam exec -- dune build
 
       - name: Run tests
-        run: opam exec -- dune runtest
+        run: |
+          eval $(opam env)
+          opam exec -- dune runtest
